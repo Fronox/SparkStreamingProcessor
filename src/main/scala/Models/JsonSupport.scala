@@ -7,7 +7,7 @@ import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 trait JsonSupport extends SprayJsonSupport {
   import DefaultJsonProtocol._
   implicit val defaultFormat: DefaultFormats.type = DefaultFormats
-  implicit val testDataJsonFormat: RootJsonFormat[TestData] = jsonFormat1(TestData)
+  implicit val testDataJsonFormat: RootJsonFormat[PredictData] = jsonFormat1(PredictData)
   implicit val tuneDataJsonFormat: RootJsonFormat[TuneData] = jsonFormat2(TuneData)
 
 }
