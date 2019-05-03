@@ -61,7 +61,7 @@ object Main extends JsonSupport {
   val predictEndpoint3: String = s"http://$host:$port3/predict"
 
   //Data sending function
-  def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String)(implicit format: RootJsonFormat[T]): Unit = {
+  def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String)/*(implicit format: RootJsonFormat[T])*/: Unit = {
     streamData.foreachRDD{
       rdd =>
         println(s"new rdd ${rdd.hashCode()}")
@@ -104,15 +104,15 @@ object Main extends JsonSupport {
 
   def streamToPredictData(stream: DStream[Array[String]]): DStream[PredictData] = {
     stream.map {
-      case Array(date, _) =>
-        PredictData(date)
+      case Array(date, _, open, high, low, close) =>
+        PredictData(date, open.toDouble, high.toDouble, low.toDouble, close.toDouble)
     }
   }
 
   def streamToTuneData(stream: DStream[Array[String]], duration: Duration): DStream[TuneData] = {
     stream.window(duration, duration).map{
-      case Array(date, quantity) =>
-        TuneData(date, quantity.toInt)
+      case Array(date, quantity, open, high, low, close) =>
+        TuneData(date, quantity.toInt, open.toDouble, high.toDouble, low.toDouble, close.toDouble)
     }
   }
 
@@ -138,7 +138,7 @@ object Main extends JsonSupport {
     tuneData.print()
 
     //Sending data to ML model
-    //sendDataToUrl(predictData, predictEndpoint)
+    sendDataToUrl(predictData, predictEndpoint)
     //sendDataToUrl(tuneData, tuneEndpoint)
   }
 
