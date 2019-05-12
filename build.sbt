@@ -24,5 +24,6 @@ libraryDependencies ++= Seq (
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.7" % Test,
   "com.typesafe.akka" %% "akka-testkit" % "2.5.21" % Test,
   "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.7",
-  "org.scala-lang.modules" %% "scala-xml" % "1.2.0"
+  "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
+  "com.github.nscala-time" %% "nscala-time" % "2.22.0"
 )

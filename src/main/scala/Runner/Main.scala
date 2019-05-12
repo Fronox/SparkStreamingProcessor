@@ -3,22 +3,23 @@ package Runner
 import Models.{JsonSupport, PredictData, ToJsonString, TuneData}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.{HttpMethods, HttpRequest, Uri}
 import akka.stream.ActorMaterializer
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.KafkaUtils
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.json4s.jackson.Serialization.write
-import spray.json._
+import com.github.nscala_time.time.Imports._
 
 object Main extends JsonSupport {
   //Spark settings
-  val seconds: Int = 1
+  val seconds: Int = 2
   val master: String = "local[*]"
   val appName: String = "Streaming processor"
   val conf: SparkConf = new SparkConf().setAppName(appName).setMaster(master)
@@ -64,12 +65,12 @@ object Main extends JsonSupport {
   def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String)/*(implicit format: RootJsonFormat[T])*/: Unit = {
     streamData.foreachRDD{
       rdd =>
-        println(s"new rdd ${rdd.hashCode()}")
+        //println(s"new rdd ${rdd.hashCode()}")
         val data: List[T] = rdd.collect().toList
         if(data.nonEmpty) {
           println("data:")
           data.foreach(println)
-          val request = HttpRequest(
+          val request = HttpRequest (
             method = HttpMethods.POST,
             uri = Uri(uriStr),
             entity = write(data)
@@ -109,7 +110,7 @@ object Main extends JsonSupport {
     }
   }
 
-  def streamToTuneData(stream: DStream[Array[String]], duration: Duration): DStream[TuneData] = {
+  def streamToTuneData(stream: DStream[Array[String]], duration: streaming.Duration): DStream[TuneData] = {
     stream.window(duration, duration).map{
       case Array(date, quantity, open, high, low, close) =>
         TuneData(date, quantity.toInt, open.toDouble, high.toDouble, low.toDouble, close.toDouble)
@@ -132,13 +133,15 @@ object Main extends JsonSupport {
 
     //Data for predict and tune
     val predictData: DStream[PredictData] = streamToPredictData(splittedLines)
-    val tuneData: DStream[TuneData] = streamToTuneData(splittedLines, Seconds(10))
+    val tuneData: DStream[TuneData] = streamToTuneData(splittedLines, Seconds(8))
 
-    predictData.print()
-    tuneData.print()
+    // predictData.transformWith(dates, (x, y) => x.zip(y))
+
+    //predictData.print()
+    //tuneData.print()
 
     //Sending data to ML model
-    sendDataToUrl(predictData, predictEndpoint)
+    //sendDataToUrl(predictData, predictEndpoint)
     //sendDataToUrl(tuneData, tuneEndpoint)
   }
 
