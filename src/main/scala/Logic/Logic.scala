@@ -1,5 +1,7 @@
 package Logic
 
+import java.io.{BufferedWriter, FileWriter}
+
 import Models.{PredictData, ToJsonString, TuneData}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -15,6 +17,7 @@ import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.json4s.jackson.Serialization.write
 import Settings.Settings._
 import org.json4s.DefaultFormats
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object Logic {
   //Akka-http implicits
@@ -23,19 +26,23 @@ object Logic {
   implicit val defaultFormat: DefaultFormats.type = DefaultFormats
 
   //Data sending function
-  def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String)/*(implicit format: RootJsonFormat[T])*/: Unit = {
+  def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String): Unit = {
     streamData.foreachRDD{
       rdd =>
         if(!rdd.isEmpty()) {
+          val start = System.currentTimeMillis()
+          val id = uriStr.split(":")(2).charAt(3)
           val data: List[T] = rdd.collect().toList
-          println("data:")
-          println(data)
+          val d = write(data)
+          println(s"data $id: $start")
+          println(d)
+          println()
           val request = HttpRequest (
             method = HttpMethods.POST,
             uri = Uri(uriStr),
-            entity = HttpEntity(ContentTypes.`application/json`, write(data))
+            entity = HttpEntity(ContentTypes.`application/json`, d)
           )
-          Http().singleRequest(request)
+          Http().singleRequest(request).map(x => x.discardEntityBytes())
           /*Marshal(data.head).to[RequestEntity] flatMap { dataEntity =>
             val request = HttpRequest(
               method = HttpMethods.POST,
@@ -45,6 +52,20 @@ object Logic {
             println(dataEntity)
             Http().singleRequest(request)
           }*/
+          val end = System.currentTimeMillis()
+
+          if(uriStr.contains("predict")) {
+            val bw = new BufferedWriter(new FileWriter(s"SparkTestPred2_$id.csv", true))
+            bw.write(s"$start, $end, ${end - start}")
+            bw.newLine()
+            bw.close()
+          }
+          else {
+            val bw = new BufferedWriter(new FileWriter(s"SparkTestTune2_$id.csv", true))
+            bw.write(s"$start, $end, ${end - start}")
+            bw.newLine()
+            bw.close()
+          }
         }
     }
   }
@@ -104,7 +125,6 @@ object Logic {
 
     /*tuneData.print()
     predictData.print()*/
-
     //Sending data serving layer
     sendDataToUrl(predictData, predictEndpoint)
     sendDataToUrl(tuneData, tuneEndpoint)

@@ -29,20 +29,28 @@ object Settings {
   val tuneEndpoint = s"http://$host:$port/$prefix/tune/"*/
 
   //Model API settings
-  private val host: String = "localhost"
+  private val predictHost1: String = "localhost"
+  private val tuneHost1: String = "localhost"
 
-  private val port1: String = "5000"
-  val tuneEndpoint1: String = s"http://$host:$port1/tune"
-  val resetEndpoint1: String = s"http://$host:$port1/reset"
-  val predictEndpoint1: String = s"http://$host:$port1/predict"
+  private val predictPort1: String = "5000"
+  private val tunePort1: String = "5050"
+  val tuneEndpoint1: String = s"http://$tuneHost1:$tunePort1/tune"
+  val resetEndpoint1: String = s"http://$tuneHost1:$tunePort1/reset"
+  val predictEndpoint1: String = s"http://$predictHost1:$predictPort1/predict"
 
-  private val port2: String = "idontknowyet"
-  val tuneEndpoint2: String = s"http://$host:$port2/tune"
-  val resetEndpoint2: String = s"http://$host:$port2/reset"
-  val predictEndpoint2: String = s"http://$host:$port2/predict"
+  private val predictHost2: String = "localhost"
+  private val tuneHost2: String = "localhost"
+  private val predictPort2: String = "5001"
+  private val tunePort2: String = "5051"
+  val tuneEndpoint2: String = s"http://$tuneHost2:$tunePort2/tune"
+  val resetEndpoint2: String = s"http://$tuneHost2:$tunePort2/reset"
+  val predictEndpoint2: String = s"http://$predictHost2:$predictPort2/predict"
 
-  val port3: String = "idontknowyet"
-  val tuneEndpoint3: String = s"http://$host:$port3/tune"
-  val resetEndpoint3: String = s"http://$host:$port3/reset"
-  val predictEndpoint3: String = s"http://$host:$port3/predict"
+  private val predictHost3: String = "localhost"
+  private val tuneHost3: String = "localhost"
+  private val predictPort3: String = "5002"
+  private val tunePort3: String = "5052"
+  val tuneEndpoint3: String = s"http://$tuneHost3:$tunePort3/tune"
+  val resetEndpoint3: String = s"http://$tuneHost3:$tunePort3/reset"
+  val predictEndpoint3: String = s"http://$predictHost3:$predictPort3/predict"
 }
