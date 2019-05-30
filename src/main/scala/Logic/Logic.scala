@@ -1,22 +1,21 @@
 package Logic
 
-import java.io.{BufferedWriter, FileWriter}
-
-import Models.{PredictData, ToJsonString, TuneData}
+import Models.{PredictData, TuneData}
+import Settings.Settings._
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpRequest, Uri}
+import akka.http.scaladsl.model._
 import akka.stream.ActorMaterializer
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.streaming
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.KafkaUtils
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
-import org.json4s.jackson.Serialization.write
-import Settings.Settings._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.json4s.DefaultFormats
+import org.json4s.jackson.Serialization.write
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object Logic {
@@ -25,72 +24,67 @@ object Logic {
   implicit val mat: ActorMaterializer = ActorMaterializer()
   implicit val defaultFormat: DefaultFormats.type = DefaultFormats
 
-  //Data sending function
-  def sendDataToUrl[T <: ToJsonString](streamData: DStream[T], uriStr: String): Unit = {
+  //Data sending functions
+  def sendPredictDataToUrl(streamData: DStream[(Int, PredictData)], uriStr: String): Unit = {
     streamData.foreachRDD{
       rdd =>
-        if(!rdd.isEmpty()) {
-          val start = System.currentTimeMillis()
-          val id = uriStr.split(":")(2).charAt(3)
-          val data: List[T] = rdd.collect().toList
-          val d = write(data)
-          println(s"data $id: $start")
-          println(d)
-          println()
-          val request = HttpRequest (
-            method = HttpMethods.POST,
-            uri = Uri(uriStr),
-            entity = HttpEntity(ContentTypes.`application/json`, d)
-          )
-          Http().singleRequest(request).map(x => x.discardEntityBytes())
-          /*Marshal(data.head).to[RequestEntity] flatMap { dataEntity =>
-            val request = HttpRequest(
-              method = HttpMethods.POST,
-              uri = Uri(uriStr),
-              entity = dataEntity
-            )
-            println(dataEntity)
-            Http().singleRequest(request)
-          }*/
-          val end = System.currentTimeMillis()
+        rdd.groupByKey().foreach {
+          case (portEnd: Int, arr: Iterable[PredictData]) =>
+            val dataJson = write(arr)
+            val uri = uriStr.replace("_", portEnd.toString)
 
-          if(uriStr.contains("predict")) {
-            val bw = new BufferedWriter(new FileWriter(s"SparkTestPred2_$id.csv", true))
-            bw.write(s"$start, $end, ${end - start}")
-            bw.newLine()
-            bw.close()
+            val request = HttpRequest (
+              method = HttpMethods.POST,
+              uri = Uri(uri),
+              entity = HttpEntity(ContentTypes.`application/json`, dataJson)
+            )
+            Http().singleRequest(request).map(x => x.discardEntityBytes())
           }
-          else {
-            val bw = new BufferedWriter(new FileWriter(s"SparkTestTune2_$id.csv", true))
-            bw.write(s"$start, $end, ${end - start}")
-            bw.newLine()
-            bw.close()
-          }
+    }
+  }
+
+  def sendTuneDataToUrl(streamData: DStream[(Int, TuneData)], uriStr: String): Unit = {
+    streamData.foreachRDD{
+      rdd =>
+        rdd.groupByKey().foreach {
+          case (portEnd: Int, arr: Iterable[TuneData]) =>
+            val dataJson = write(arr)
+            println(s"data $portEnd")
+            println(dataJson)
+            println()
+            val uri = uriStr.replace("_", portEnd.toString)
+
+            val request = HttpRequest (
+              method = HttpMethods.POST,
+              uri = Uri(uri),
+              entity = HttpEntity(ContentTypes.`application/json`, dataJson)
+            )
+            Http().singleRequest(request).map(x => x.discardEntityBytes())
         }
     }
   }
 
   //Stream transformation functions:
-  def inputStreamToLines(stream: InputDStream[ConsumerRecord[String, String]]): DStream[String] = {
+  def inputStreamToLines(stream: InputDStream[ConsumerRecord[String, String]]): DStream[(Int, String)] = {
     stream
-      .map(x => x.value())
-      .filter(x => x != "")
+      .map(x => (x.key().toInt, x.value()))
+      .filter(x => x._2 != "")
   }
 
-  def streamSplit(stream: DStream[String], stringSeparator: String): DStream[Array[String]] = {
+  def streamSplit(stream: DStream[(Int, String)], stringSeparator: String): DStream[(Int, Array[String])] = {
     stream
-      .map(str => str.split(stringSeparator))
+      .mapValues(str => str.split(stringSeparator))
   }
 
-  def streamToPredictData(stream: DStream[Array[String]]): DStream[PredictData] = {
-    stream.map {
+  def streamToPredictData(stream: DStream[(Int, Array[String])]): DStream[(Int, PredictData)] = {
+    stream.mapValues {
       case Array(date, open, high, low, close) =>
         PredictData(date, open.toDouble, high.toDouble, low.toDouble, close.toDouble)
     }
   }
 
-  def streamToTuneData(stream: DStream[Array[String]], duration: streaming.Duration): DStream[TuneData] = {
-    stream.window(duration, duration).map{
+  def streamToTuneData(stream: DStream[(Int, Array[String])], duration: streaming.Duration): DStream[(Int, TuneData)] = {
+    stream.window(duration, duration).mapValues {
       case Array(date, open, high, low, close, quantity) =>
         TuneData(date, quantity.toInt, open.toDouble, high.toDouble, low.toDouble, close.toDouble)
     }
@@ -113,20 +107,28 @@ object Logic {
     )
 
     //Transformed streams
-    val tuneLines: DStream[String] = inputStreamToLines(tuneStream)
-    val predictLines: DStream[String] = inputStreamToLines(predictStream)
+    val tuneLines: DStream[(Int, String)] = inputStreamToLines(tuneStream)
+    val predictLines: DStream[(Int, String)] = inputStreamToLines(predictStream)
 
-    val tuneSplittedLines: DStream[Array[String]] = streamSplit(tuneLines, " ")
-    val predictSplittedLines: DStream[Array[String]] = streamSplit(predictLines, " ")
+    val tuneSplittedLines: DStream[(Int, Array[String])] = streamSplit(tuneLines, " ")
+    val predictSplittedLines: DStream[(Int, Array[String])] = streamSplit(predictLines, " ")
 
     //Data for predict and tune
-    val tuneData: DStream[TuneData] = streamToTuneData(tuneSplittedLines, Seconds(4))
-    val predictData: DStream[PredictData] = streamToPredictData(predictSplittedLines)
+    val tuneData: DStream[(Int, TuneData)] = streamToTuneData(tuneSplittedLines, Seconds(4))
+    val predictData: DStream[(Int, PredictData)] = streamToPredictData(predictSplittedLines)
 
-    /*tuneData.print()
-    predictData.print()*/
     //Sending data serving layer
-    sendDataToUrl(predictData, predictEndpoint)
-    sendDataToUrl(tuneData, tuneEndpoint)
+    sendPredictDataToUrl(predictData, predictEndpoint)
+    sendTuneDataToUrl(tuneData, tuneEndpoint)
   }
 }
+
+/*Marshal(data.head).to[RequestEntity] flatMap { dataEntity =>
+                val request = HttpRequest(
+                  method = HttpMethods.POST,
+                  uri = Uri(uriStr),
+                  entity = dataEntity
+                )
+                println(dataEntity)
+                Http().singleRequest(request)
+              }*/

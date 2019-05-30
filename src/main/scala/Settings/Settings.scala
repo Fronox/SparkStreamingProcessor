@@ -6,27 +6,20 @@ object Settings {
   //Kafka settings
   val quorum: String = "localhost:2181"
   val groupId: String = "console-consumer-93845"
-  val predictTopics1 = Array("media_markt_t1")
+  val predictTopics1 = Array("media_markt_t1", "media_markt_t2", "media_markt_t6", "stream4", "stream5")
   val predictTopics2 = Array("media_markt_t2")
   val predictTopics3 = Array("media_markt_t6")
-  val tuneTopics1 = Array("media_markt_t1_tune")
+  val tuneTopics1 = Array("media_markt_t1_tune", "media_markt_t2_tune", "media_markt_t6_tune")
   val tuneTopics2 = Array("media_markt_t2_tune")
   val tuneTopics3 = Array("media_markt_t6_tune")
   val kafkaParams: Map[String, Object] = Map[String, Object](
     "bootstrap.servers" -> "localhost:9092",
     "key.deserializer" -> classOf[StringDeserializer],
     "value.deserializer" -> classOf[StringDeserializer],
-    "group.id" -> "fronox-spark-group",
+    "group.id" -> "fronox-spark-group_fn",
     "auto.offset.reset" -> "latest",
     "enable.auto.commit" -> (false: java.lang.Boolean)
   )
-
-  //Serving layer settings
-  /*val host = "localhost"
-  val port = "8000"
-  val prefix = "servingLayer"
-  val predictEndpoint = s"http://$host:$port/$prefix/predict/"
-  val tuneEndpoint = s"http://$host:$port/$prefix/tune/"*/
 
   //Model API settings
   private val predictHost1: String = "localhost"
@@ -34,9 +27,14 @@ object Settings {
 
   private val predictPort1: String = "5000"
   private val tunePort1: String = "5050"
+  private val predPortTemp: String = "500_"
+  private val tunePortTemp: String = "505_"
   val tuneEndpoint1: String = s"http://$tuneHost1:$tunePort1/tune"
   val resetEndpoint1: String = s"http://$tuneHost1:$tunePort1/reset"
   val predictEndpoint1: String = s"http://$predictHost1:$predictPort1/predict"
+
+  val predictTemp1: String = s"http://$predictHost1:$predPortTemp/predict"
+  val tuneTemp1: String = s"http://$predictHost1:$tunePortTemp/tune"
 
   private val predictHost2: String = "localhost"
   private val tuneHost2: String = "localhost"
