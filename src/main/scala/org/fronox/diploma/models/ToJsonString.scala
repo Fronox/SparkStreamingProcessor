@@ -1,4 +1,4 @@
-package Models
+package org.fronox.diploma.models
 
 trait ToJsonString {
   def toJsonString: String

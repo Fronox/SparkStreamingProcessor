@@ -1,11 +1,10 @@
-package Logic
+package org.fronox.diploma.logic
 
-import Models.{PredictData, TuneData}
-import Settings.Settings._
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.stream.ActorMaterializer
+import com.typesafe.scalalogging.Logger
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.streaming
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
@@ -13,6 +12,8 @@ import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.KafkaUtils
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.fronox.diploma.models.{PredictData, TuneData}
+import org.fronox.diploma.settings.Settings
 import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization.write
 
@@ -24,35 +25,40 @@ object Logic {
   implicit val mat: ActorMaterializer = ActorMaterializer()
   implicit val defaultFormat: DefaultFormats.type = DefaultFormats
 
+
+  val logger = Logger("Spark logger")
+
   //Data sending functions
-  def sendPredictDataToUrl(streamData: DStream[(Int, PredictData)], uriStr: String): Unit = {
+  def sendPredictDataToUrl(streamData: DStream[(Int, PredictData)], settings: Settings): Unit = {
     streamData.foreachRDD{
       rdd =>
         rdd.groupByKey().foreach {
           case (portEnd: Int, arr: Iterable[PredictData]) =>
             val dataJson = write(arr)
-            val uri = uriStr.replace("_", portEnd.toString)
-
+            val uri = settings.toPredictEndpoint(portEnd)
+            logger.info(s"Data predict $portEnd")
+            logger.info(dataJson)
+            println()
             val request = HttpRequest (
               method = HttpMethods.POST,
               uri = Uri(uri),
               entity = HttpEntity(ContentTypes.`application/json`, dataJson)
             )
             Http().singleRequest(request).map(x => x.discardEntityBytes())
-          }
+        }
     }
   }
 
-  def sendTuneDataToUrl(streamData: DStream[(Int, TuneData)], uriStr: String): Unit = {
+  def sendTuneDataToUrl(streamData: DStream[(Int, TuneData)], settings: Settings): Unit = {
     streamData.foreachRDD{
       rdd =>
         rdd.groupByKey().foreach {
           case (portEnd: Int, arr: Iterable[TuneData]) =>
             val dataJson = write(arr)
-            println(s"data $portEnd")
-            println(dataJson)
+            logger.info(s"Data predict $portEnd")
+            logger.info(dataJson)
             println()
-            val uri = uriStr.replace("_", portEnd.toString)
+            val uri = settings.toTuneEndpoint(portEnd)
 
             val request = HttpRequest (
               method = HttpMethods.POST,
@@ -91,19 +97,18 @@ object Logic {
   }
 
   //Main job function
-  def job(ssc: StreamingContext, predictTopics: Array[String], tuneTopics: Array[String],
-          predictEndpoint: String, tuneEndpoint: String): Unit = {
+  def job(ssc: StreamingContext, settings: Settings): Unit = {
     //Input streams
-    val tuneStream = KafkaUtils.createDirectStream[String, String](
-      ssc,
-      PreferConsistent,
-      Subscribe[String, String](tuneTopics, kafkaParams)
-    )
-
     val predictStream = KafkaUtils.createDirectStream[String, String](
       ssc,
       PreferConsistent,
-      Subscribe[String, String](predictTopics, kafkaParams)
+      Subscribe[String, String](settings.predictTopics, settings.kafkaParams)
+    )
+
+    val tuneStream = KafkaUtils.createDirectStream[String, String](
+      ssc,
+      PreferConsistent,
+      Subscribe[String, String](settings.tuneTopics, settings.kafkaParams)
     )
 
     //Transformed streams
@@ -118,17 +123,7 @@ object Logic {
     val predictData: DStream[(Int, PredictData)] = streamToPredictData(predictSplittedLines)
 
     //Sending data serving layer
-    sendPredictDataToUrl(predictData, predictEndpoint)
-    sendTuneDataToUrl(tuneData, tuneEndpoint)
+    sendPredictDataToUrl(predictData, settings)
+    sendTuneDataToUrl(tuneData, settings)
   }
 }
-
-/*Marshal(data.head).to[RequestEntity] flatMap { dataEntity =>
-                val request = HttpRequest(
-                  method = HttpMethods.POST,
-                  uri = Uri(uriStr),
-                  entity = dataEntity
-                )
-                println(dataEntity)
-                Http().singleRequest(request)
-              }*/
